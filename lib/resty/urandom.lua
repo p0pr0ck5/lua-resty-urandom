@@ -50,15 +50,14 @@ end
 
 -- fill the random_buf
 local function _fill_buf()
+	-- if we're full, we don't need to do anything
+	if (random_buf_count == num_chunks) then
+		return true
+	end
+
 	if (not _acquire_lock()) then
 		ngx.log(ngx.WARN, "Couldn't acquire lock!")
 		return false
-	end
-
-	-- if we're full, we don't need to do anything
-	if (random_buf_count == num_chunks) then
-		_release_lock()
-		return true
 	end
 
 	--[[
@@ -125,17 +124,11 @@ if length is not an even multiple of chunk_size, an additional chunk
 will be taken and split to satisfy the request
 --]]
 function _M.get_string(length)
-	if (not _acquire_lock()) then
-		return nil, "Couldn't acquire semaphore lock"
-	end
-
 	if (random_buf_count == 0) then
-		_release_lock()
 		return nil, "Buffer pool is empty!"
 	end
 
 	if (length > max_size) then
-		_release_lock()
 		return nil, "Cannot get more than max_size (" .. max_size .. ") bytes"
 	end
 
@@ -144,6 +137,10 @@ function _M.get_string(length)
 
 	if (extra > 0) then
 		get_chunks = get_chunks + 1
+	end
+
+	if (not _acquire_lock()) then
+		return nil, "Couldn't acquire semaphore lock"
 	end
 
 	if (get_chunks > random_buf_count) then
@@ -196,18 +193,16 @@ if num is greater than the number of available chunks in the buffer
 this will return as much data as is held in the buffer
 --]]
 function _M.get_chunks(num)
-	if (not _acquire_lock()) then
-		return nil, "Couldn't acquire semaphore lock"
-	end
-
 	if (random_buf_count == 0) then
-		_release_lock()
 		return nil, "Buffer pool is empty!"
 	end
 
 	if (num > num_chunks) then
-		_release_lock()
 		return nil, "Cannot get more than num_chunks (" .. max_size .. ") chunks"
+	end
+
+	if (not _acquire_lock()) then
+		return nil, "Couldn't acquire semaphore lock"
 	end
 
 	if (num > random_buf_count) then
