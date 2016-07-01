@@ -68,7 +68,7 @@ local function _fill_buf()
 	local f = io.open("/dev/urandom", "rb")
 
 	if (not f) then
-		ngx.log(ngx.WAR, "Couldn't open /dev/urandom")
+		ngx.log(ngx.WARN, "Couldn't open /dev/urandom")
 		_release_lock()
 		return false
 	end
