@@ -1,6 +1,6 @@
 local _M = {}
 
-_M.verion = "0.1"
+_M.version = "0.1"
 
 local to_hex    = require("resty.string").to_hex
 local semaphore = require("ngx.semaphore")
