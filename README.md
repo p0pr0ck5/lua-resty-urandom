@@ -16,7 +16,7 @@ lua-resty-urandom seeks to provide efficient access to the `/dev/urandom` device
 
 init_worker_by_lua_block {
   local urandom = require "resty.urandom"
-  
+
   urandom.init({
     max_size   = 1024 * 1024,
     chunk_size = 128,

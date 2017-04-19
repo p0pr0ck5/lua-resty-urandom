@@ -5,6 +5,11 @@ _M.version = "0.1"
 local to_hex    = require("resty.string").to_hex
 local semaphore = require("ngx.semaphore")
 
+local timer_at = ngx.timer.at
+local ngx_log  = ngx.log
+local DEBUG    = ngx.DEBUG
+local WARN     = ngx.WARN
+
 local initted = false
 
 -- buffer geometry
@@ -34,7 +39,7 @@ end
 local function _acquire_lock()
 	local ok, err = sem:wait(1)
 
-	if (not ok) then
+	if not ok then
 		return false
 	end
 
@@ -51,12 +56,12 @@ end
 -- fill the random_buf
 local function _fill_buf()
 	-- if we're full, we don't need to do anything
-	if (random_buf_count == num_chunks) then
+	if random_buf_count == num_chunks then
 		return true
 	end
 
-	if (not _acquire_lock()) then
-		ngx.log(ngx.WARN, "Couldn't acquire lock!")
+	if not _acquire_lock() then
+		ngx_log(WARN, "Couldn't acquire lock!")
 		return false
 	end
 
@@ -67,8 +72,8 @@ local function _fill_buf()
 	--]]
 	local f = io.open("/dev/urandom", "rb")
 
-	if (not f) then
-		ngx.log(ngx.WARN, "Couldn't open /dev/urandom")
+	if not f then
+		ngx_log(WARN, "Couldn't open /dev/urandom")
 		_release_lock()
 		return false
 	end
@@ -81,13 +86,13 @@ local function _fill_buf()
 	to the next slot in random_buf, and bail out once (if) we fill up
 	--]]
 	for i = 1, read_size, chunk_size do
-		if (random_buf_count == num_chunks) then
+		if random_buf_count == num_chunks then
 			break
 		end
 
 		chunk = string.sub(raw_data, i, chunk_size + i - 1)
 
-		if (chunk:len() == chunk_size) then
+		if chunk:len() == chunk_size then
 			random_buf_count = random_buf_count + 1
 			random_buf[random_buf_count] = to_hex(chunk)
 		end
@@ -97,20 +102,20 @@ local function _fill_buf()
 
 	_release_lock()
 
-	ngx.log(ngx.DEBUG, "c:" .. random_buf_count)
+	ngx_log(DEBUG, "c:" .. random_buf_count)
 
 	return true
 end
 
 -- repeating timer to fill the buffer
 local function _periodic_fill(premature)
-	if (premature) then
+	if premature then
 		return
 	end
 
 	_fill_buf()
 
-	ngx.timer.at(rate, _periodic_fill)
+	timer_at(rate, _periodic_fill)
 end
 
 
@@ -124,32 +129,32 @@ if length is not an even multiple of chunk_size, an additional chunk
 will be taken and split to satisfy the request
 --]]
 function _M.get_string(length)
-	if (random_buf_count == 0) then
+	if random_buf_count == 0 then
 		return nil, "Buffer pool is empty!"
 	end
 
-	if (length > max_size) then
+	if length > max_size then
 		return nil, "Cannot get more than max_size (" .. max_size .. ") bytes"
 	end
 
 	local get_chunks = math.floor(length / chunk_size)
 	local extra = length % chunk_size
 
-	if (extra > 0) then
+	if extra > 0 then
 		get_chunks = get_chunks + 1
 	end
 
-	if (not _acquire_lock()) then
+	if not _acquire_lock() then
 		return nil, "Couldn't acquire semaphore lock"
 	end
 
-	if (get_chunks > random_buf_count) then
-		ngx.log(ngx.WARN, "Tried to get " .. get_chunks .. " chunks but only supplying " .. random_buf_count)
+	if get_chunks > random_buf_count then
+		ngx_log(WARN, "Tried to get " .. get_chunks .. " chunks but only supplying " .. random_buf_count)
 		get_chunks = random_buf_count
 		extra = 0
 	end
 
-	ngx.log(ngx.DEBUG, "g:" .. get_chunks)
+	ngx_log(DEBUG, "g:" .. get_chunks)
 
 	local res_buf = new_tab(get_chunks, 0)
 	local res_buf_count = 0
@@ -168,8 +173,8 @@ function _M.get_string(length)
 		pop one more chunk and get a subset of its length. this means we're
 		wasting (chunk_size - extra) data
 		--]]
-		if (i == get_chunks and extra > 0) then
-			ngx.log(ngx.DEBUG, "e:" .. extra)
+		if i == get_chunks and extra > 0 then
+			ngx_log(DEBUG, "e:" .. extra)
 			res_buf[res_buf_count] = string.sub(random_buf[random_buf_count], 1, extra)
 		else
 			res_buf[res_buf_count] = random_buf[random_buf_count]
@@ -181,7 +186,7 @@ function _M.get_string(length)
 
 	_release_lock()
 
-	ngx.log(ngx.DEBUG, "c:" .. random_buf_count)
+	ngx_log(DEBUG, "c:" .. random_buf_count)
 
 	return table.concat(res_buf, ''), nil
 end
@@ -193,24 +198,24 @@ if num is greater than the number of available chunks in the buffer
 this will return as much data as is held in the buffer
 --]]
 function _M.get_chunks(num)
-	if (random_buf_count == 0) then
+	if random_buf_count == 0 then
 		return nil, "Buffer pool is empty!"
 	end
 
-	if (num > num_chunks) then
+	if num > num_chunks then
 		return nil, "Cannot get more than num_chunks (" .. max_size .. ") chunks"
 	end
 
-	if (not _acquire_lock()) then
+	if not _acquire_lock() then
 		return nil, "Couldn't acquire semaphore lock"
 	end
 
-	if (num > random_buf_count) then
-		ngx.log(ngx.WARN, "Tried to get " .. num .. " chunks but only supplying " .. random_buf_count)
+	if num > random_buf_count then
+		ngx_log(WARN, "Tried to get " .. num .. " chunks but only supplying " .. random_buf_count)
 		num = random_buf_count
 	end
 
-	ngx.log(ngx.DEBUG, "g:" .. num)
+	ngx_log(DEBUG, "g:" .. num)
 
 	local res_buf = new_tab(num, 0)
 	local res_buf_count = 0
@@ -224,7 +229,7 @@ function _M.get_chunks(num)
 
 	_release_lock()
 
-	ngx.log(ngx.DEBUG, "c:" .. random_buf_count)
+	ngx_log(DEBUG, "c:" .. random_buf_count)
 
 	return res_buf, nil
 end
@@ -243,7 +248,7 @@ is the largest value for the buffer's geometry, additional chunks will not
 be filled, though periodic timer runs will still check and fill if needed
 --]]
 function _M.init(opts)
-	if (initted) then
+	if initted then
 		return true, nil
 	end
 
@@ -251,22 +256,22 @@ function _M.init(opts)
 	chunk_size  = opts.chunk_size
 	rate        = opts.rate or 1
 
-	if (type(max_size) ~= "number" or max_size < 0) then
+	if type(max_size) ~= "number" or max_size < 0 then
 		return false, "max_size must be a positive integer"
 	end
 
-	if (type(chunk_size) ~= "number" or chunk_size < 0 or max_size < chunk_size) then
+	if type(chunk_size) ~= "number" or chunk_size < 0 or max_size < chunk_size then
 		return false, "chunk_size must be a positive number less than max_size"
 	end
 
-	if (type(rate) ~= "number" or rate < 0) then
+	if type(rate) ~= "number" or rate < 0 then
 		return false, "rate must be a positive integer"
 	end
 
 	num_chunks = math.floor(max_size / chunk_size)
 	max_size   = num_chunks * chunk_size
 
-	ngx.log(ngx.DEBUG, "b:" .. chunk_size .. ",m:" .. max_size .. ",n:" .. num_chunks)
+	ngx_log(DEBUG, "b:" .. chunk_size .. ",m:" .. max_size .. ",n:" .. num_chunks)
 
 	--create the semaphore instance with one available resource
 	sem = semaphore.new(1)
@@ -274,7 +279,7 @@ function _M.init(opts)
 	random_buf = new_tab(num_chunks, 0)
 
 	-- this will run as soon as we give up control of our thread
-	ngx.timer.at(0, _periodic_fill)
+	timer_at(0, _periodic_fill)
 
 	initted = true
 
