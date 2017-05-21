@@ -34,7 +34,7 @@ server {
 			local gargs  = ngx.req.get_uri_args()
 			local length = gargs.length or 128
 
-			local data, err = urandom.get_string(tonumber(length))
+			local data, len, err = urandom.get_string(tonumber(length))
 
 			if (err) then
 				ngx.log(ngx.WARN, err)
@@ -51,7 +51,7 @@ server {
 			local gargs = ngx.req.get_uri_args()
 			local num   = gargs.num or 1
 
-			local data, err = urandom.get_chunks(tonumber(num))
+			local data, len, err = urandom.get_chunks(tonumber(num))
 
 			if (err) then
 				ngx.log(ngx.WARN, err)
@@ -76,6 +76,9 @@ Initialize the buffer geometry and fill rate with a table of options.
 * **max_size**: The total amount of psuedorandom data to store, given in bytes.
 * **chunk_size**: The amount of data to store in a given "chunk", given in bytes.
 * **rate**: The rate at which to fill a portion of the buffer with data from `/dev/urandom`, given in seconds. This call is passed directly to `ngx.timer.at` (so fractions of seconds are available as well).
+* **read_size**: The number of bytes to read from urandom at one time.
+* **max_fill**: The total number of bytes to read per invocation of the background buffer fill function. If this value is less than `read_size`, the thread will yeild before attempting to read again to meet this value.
+* **lock_timeout**: Amount of time, in seconds, to wait on the worker semaphore.
 
 The total number of chunks is calculated as floor(max_size / chunk_size), so if chunk_size is not an even divisor, the total size of the buffer will be less than the given max_size. so do your math right :p
 
