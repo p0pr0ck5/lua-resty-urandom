@@ -10,18 +10,28 @@ This library is in active development and is production ready.
 
 lua-resty-urandom seeks to provide efficient access to the `/dev/urandom` device. Background reads fill a per-worker buffer with psuedorandom data, retrievable as a string or table of strings.
 
+## Installation
+
+Install via Luarocks or OPM:
+
+```bash
+ $ luarocks install lua-resty-urandom
+
+ $ opm install p0pr0ck5/lua-resty-urandom # assume lua_system_constants >= 0.1.2 is installed
+```
+
 ## Synopsis
 
 ```lua
 
 init_worker_by_lua_block {
-  local urandom = require "resty.urandom"
+	local urandom = require "resty.urandom"
 
-  urandom.init({
-    max_size   = 1024 * 1024,
-    chunk_size = 128,
-    rate       = .1
-  })
+	urandom.init({
+		max_size   = 1024 * 1024,
+		chunk_size = 128,
+		rate       = .1
+	})
 }
 
 [...snip...]
